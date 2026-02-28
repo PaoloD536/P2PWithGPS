@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">P2PWithGPS</string>
+    <string name="connection_status" />
+    <string name="location_here" />
+    <string name="send" />
+    <string name="message" />
+    <string name="discover" />
+    <string name="wifi_toggle" />
+</resources>
