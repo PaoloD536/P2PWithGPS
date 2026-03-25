@@ -7,6 +7,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
 import android.location.Location;
 import android.net.wifi.p2p.WifiP2pConfig;
 import android.net.wifi.p2p.WifiP2pDevice;
@@ -29,6 +30,8 @@ import android.widget.TextView;
 import androidx.activity.EdgeToEdge;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.camera.core.CameraSelector;
+import androidx.camera.core.ImageAnalysis;
 import androidx.core.app.ActivityCompat;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
@@ -52,6 +55,21 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
+
+import androidx.camera.lifecycle.ProcessCameraProvider;
+import androidx.camera.core.CameraSelector;
+import androidx.camera.core.ImageAnalysis;
+import androidx.camera.core.ImageProxy;
+import androidx.core.content.ContextCompat;
+import com.google.common.util.concurrent.ListenableFuture;
+import android.util.Size;
+import java.util.concurrent.Executors;
+import java.io.ByteArrayOutputStream;
+import java.nio.ByteBuffer;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 
 public class MainActivity extends AppCompatActivity {
     Button btnOnOff, btnDiscover, btnSend, btnDisconnect;
@@ -68,11 +86,12 @@ public class MainActivity extends AppCompatActivity {
     WifiP2pDevice[] deviceArray;
     ServerClass serverClass;
     ClientClass clientClass;
-    SendReceive sendReceive;
+    SendReceive sendReceive, videoSendReceive, gpsSendReceive;
     FusedLocationProviderClient flclient;
     private static final int LOCATION_PERMISSION_REQUEST = 1001;
-
     private String GPScoordinates;
+    private int TYPE_VIDEO = 1;
+    private int TYPE_GPS = 2;
 
 
     //onCreate========================================================================================================================================================
@@ -170,29 +189,50 @@ public class MainActivity extends AppCompatActivity {
         btnSend.setOnClickListener(v -> {
             //String msg = writeMsg.getText().toString(); //set msg to message written in textbox
             if (GPScoordinates != null && !GPScoordinates.isEmpty()) {
-                //save the GPS location message onto GPScoordinates
-                //sendReceive.write(1, msg.getBytes()); //send msg to other device
-                sendReceive.write(GPScoordinates.getBytes()); //send loc to other device
+                try {
+                    byte[] data = GPScoordinates.getBytes();
+                    sendReceive.dataOutputStream.writeInt(TYPE_GPS);
+                    sendReceive.dataOutputStream.writeInt(data.length);
+                    sendReceive.dataOutputStream.write(data);
+                    sendReceive.dataOutputStream.flush();
+                } catch (Exception e)
+                {
+                    e.printStackTrace();
+                }
 
             } else {
                 Toast.makeText(MainActivity.this, "Not connected", Toast.LENGTH_SHORT).show();
             }
         });
         btnDisconnect.setOnClickListener(v->{
-            //disconnect the phones
-            try{
-                if (sendReceive != null)
+            if (serverClass != null) {
+                try{
+                    if (videoSendReceive != null && videoSendReceive.socket != null)
+                    {
+                        videoSendReceive.socket.close();
+                    }
+                    if(gpsSendReceive != null && gpsSendReceive.socket != null)
+                    {
+                        gpsSendReceive.socket.close();
+                    }
+                    if(serverClass != null)
+                    {
+                        if(serverClass.videoserverSocket != null)
+                        {
+                            serverClass.videoserverSocket.close();
+                        }
+                        if(serverClass.GPSserverSocket != null)
+                        {
+                            serverClass.GPSserverSocket.close();
+                        }
+                    }
+                }catch(IOException e)
                 {
-                    sendReceive.socket.close();
+                    e.printStackTrace();
                 }
-                if(serverClass != null && serverClass.serverSocket != null)
-                {
-                    serverClass.serverSocket.close();
-                }
-            }catch(IOException e)
-            {
-                e.printStackTrace();
+
             }
+            //disconnect the phones
             if (ActivityCompat.checkSelfPermission(MainActivity.this, Manifest.permission.ACCESS_FINE_LOCATION)
                     != PackageManager.PERMISSION_GRANTED || ActivityCompat.checkSelfPermission(MainActivity.this,
                     Manifest.permission.NEARBY_WIFI_DEVICES)!= PackageManager.PERMISSION_GRANTED) {
@@ -285,10 +325,64 @@ public class MainActivity extends AppCompatActivity {
                 new Handler(Looper.getMainLooper()).postDelayed(()->{ //adding a delay to starting client class
                     clientClass = new ClientClass(info.groupOwnerAddress); //create instance of client class and get IP address of host
                     clientClass.start(); //start client class thread
+                    startCamera();
                 },2000); //wait 2 seconds to let host start up before client so that there isn't a connection issue
             }
         }
     };
+
+    private void startCamera()
+    {
+        ListenableFuture<ProcessCameraProvider> cPF = ProcessCameraProvider.getInstance(this);
+        cPF.addListener(()-> {
+            try{
+                ProcessCameraProvider cP = cPF.get();
+                ImageAnalysis iA = new ImageAnalysis.Builder().setTargetResolution(new Size(320, 240)).setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST).build();
+                iA.setAnalyzer(Executors.newSingleThreadExecutor(), image -> {
+                    Bitmap bitmap = imageProxyToBitmap(image);
+                    if(sendReceive != null && bitmap != null)
+                    {
+                        sendFrame(bitmap);
+                    }
+                    image.close();
+                });
+                CameraSelector cS = CameraSelector.DEFAULT_BACK_CAMERA;
+                cP.unbindAll();
+                cP.bindToLifecycle(this, cS, iA);
+            }catch(Exception e)
+            {
+                e.printStackTrace();
+            }
+        }, ContextCompat.getMainExecutor(this));
+    }
+
+    private Bitmap imageProxyToBitmap(ImageProxy i)
+    {
+        try{
+            ByteBuffer buffer = i.getPlanes()[0].getBuffer();
+            byte[] bytes = new byte[buffer.remaining()];
+            buffer.get(bytes);
+            return BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+        }catch(Exception e)
+        {
+            return null;
+        }
+    }
+    private void sendFrame(Bitmap bp)
+    {
+        try {
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            bp.compress(Bitmap.CompressFormat.JPEG, 50, baos);
+            byte[] frame = baos.toByteArray();
+            sendReceive.dataOutputStream.writeInt(TYPE_VIDEO);
+            sendReceive.dataOutputStream.writeInt(frame.length);
+            sendReceive.dataOutputStream.write(frame);
+            sendReceive.dataOutputStream.flush();
+        }catch(Exception e)
+        {
+            e.printStackTrace();
+        }
+    }
 
     //onResume========================================================================================================================================================
     @Override
@@ -309,17 +403,19 @@ public class MainActivity extends AppCompatActivity {
         private final Socket socket; //stores connected socket & it can't be reassigned
         private InputStream inputStream; //receive data
         private OutputStream outputStream; //send data
-        //private DataInputStream dataInputStream;
-        //private DataOutputStream dataOutputStream;
+        private DataInputStream dataInputStream;
+        private DataOutputStream dataOutputStream;
         private int messType;
+        private int type;
 
-        public SendReceive(Socket skt) {
+        public SendReceive(Socket skt, int type) {
             socket = skt; //store socket
+            this.type = type;
             try {
                 inputStream = socket.getInputStream(); //get comm input channel from socket
                 outputStream = socket.getOutputStream(); //get comm output channel from socket
-                //dataInputStream = new DataInputStream(socket.getInputStream());
-                //dataOutputStream = new DataOutputStream(socket.getOutputStream());
+                dataInputStream = new DataInputStream(socket.getInputStream());
+                dataOutputStream = new DataOutputStream(socket.getOutputStream());
             } catch (IOException e) //if fail for some reason
             {
                 e.printStackTrace(); //display error
@@ -333,11 +429,19 @@ public class MainActivity extends AppCompatActivity {
             while (socket != null && socket.isConnected()) //continue to listen if socket is still connected to continuously receive messages
             {
                 try {
-                    bytes = inputStream.read(buffer); //waits until data arrives, fill buffer, & returns # of bytes
-                    if(bytes > 0) //if something is received
+                    int msgType = dataInputStream.readInt();
+                    int length = dataInputStream.readInt();
+                    byte[] data = new byte[length];
+                    dataInputStream.readFully(data);
+                    if(msgType == TYPE_VIDEO)
                     {
-                        String tempMSG = new String(buffer, 0, bytes); //convert bytes into string (start at 0 position of bytes)
-                        runOnUiThread(()->GPSLocation.setText(tempMSG)); //update message box, running on background thread so it switches back to UI thread
+                        Bitmap bitmap = BitmapFactory.decodeByteArray(data, 0, data.length);
+                        runOnUiThread(()->videofeed.setImageBitmap(bitmap));
+                    }
+                    else if(msgType == TYPE_GPS)
+                    {
+                        String msg = new String(data);
+                        runOnUiThread(()->GPSLocation.setText(msg));
                     }
                 } catch (IOException e) { //if fail for some reason
                     e.printStackTrace(); //display error
@@ -365,16 +469,22 @@ public class MainActivity extends AppCompatActivity {
     }
         // ServerClass========================================================================================================================================================
         public class ServerClass extends Thread {
-            Socket socket;
-            ServerSocket serverSocket;
+            Socket videosocket;
+            Socket gpssocket;
+            ServerSocket videoserverSocket;
+            ServerSocket GPSserverSocket;
 
             @Override
             public void run() {
                 try {
-                    serverSocket = new ServerSocket(6000);
-                    socket = serverSocket.accept();
-                    sendReceive = new SendReceive(socket);
-                    sendReceive.start();
+                    videoserverSocket = new ServerSocket(6000);
+                    GPSserverSocket = new ServerSocket(7000);
+                    videosocket = videoserverSocket.accept();
+                    gpssocket = GPSserverSocket.accept();
+                    videoSendReceive = new SendReceive(videosocket, TYPE_VIDEO);
+                    gpsSendReceive = new SendReceive(gpssocket, TYPE_GPS);
+                    videoSendReceive.start();
+                    gpsSendReceive.start();
                     runOnUiThread(() -> {
                         btnSend.setEnabled(true);
                         Toast.makeText(MainActivity.this, "Socket Connected (Host)", Toast.LENGTH_SHORT).show();
@@ -387,12 +497,14 @@ public class MainActivity extends AppCompatActivity {
 
         //ClientClass========================================================================================================================================================
         public class ClientClass extends Thread {
-            Socket socket;
+            Socket videosocket;
+            Socket gpssocket;
             String hostAdd;
 
             public ClientClass(InetAddress hostAddress) {
                 hostAdd = hostAddress.getHostAddress();
-                socket = new Socket();
+                videosocket = new Socket();
+                gpssocket = new Socket();
             }
 
             @Override
@@ -401,9 +513,12 @@ public class MainActivity extends AppCompatActivity {
                 while (attempts < 10) { //allow 10 attempts to join
                     try {
                         Thread.sleep(1000);//wait 1 second for each attempt
-                        socket.connect(new InetSocketAddress(hostAdd, 6000), 3000);//connect to port 6000
-                        sendReceive = new SendReceive(socket);
-                        sendReceive.start();
+                        videosocket.connect(new InetSocketAddress(hostAdd, 6000), 3000);//connect to port 6000
+                        gpssocket.connect(new InetSocketAddress(hostAdd, 7000), 3000);//connect to port 6000
+                        videoSendReceive = new SendReceive(videosocket, TYPE_VIDEO);
+                        gpsSendReceive = new SendReceive(gpssocket, TYPE_GPS);
+                        videoSendReceive.start();
+                        gpsSendReceive.start();
                         runOnUiThread(() -> {
                             btnSend.setEnabled(true);
                             Toast.makeText(MainActivity.this, "Socket Connected (Client)", Toast.LENGTH_SHORT).show();
