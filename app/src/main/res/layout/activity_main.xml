@@ -13,7 +13,7 @@
         android:layout_height="wrap_content"
         android:layout_alignParentStart="true"
         android:layout_alignParentTop="true"
-        android:layout_marginStart="44dp"
+        android:layout_marginStart="12dp"
         android:layout_marginTop="56dp"
         android:text="Wifi Toggle"
         app:layout_constraintStart_toStartOf="parent"
@@ -25,22 +25,22 @@
         android:layout_height="wrap_content"
         android:layout_alignBottom="@+id/onOff"
         android:layout_centerHorizontal="true"
-        android:layout_marginStart="81dp"
+        android:layout_marginStart="15dp"
         android:layout_marginTop="76dp"
-        android:layout_marginEnd="64dp"
+        android:layout_marginEnd="32dp"
         android:layout_marginBottom="41dp"
         android:text="Discover"
         app:layout_constraintBottom_toTopOf="@+id/peerListView"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintHorizontal_bias="0.0"
+        app:layout_constraintHorizontal_bias="0.054"
         app:layout_constraintStart_toEndOf="@+id/onOff"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintVertical_bias="1.0" />
 
     <ListView
         android:id="@+id/peerListView"
-        android:layout_width="402dp"
-        android:layout_height="129dp"
+        android:layout_width="381dp"
+        android:layout_height="188dp"
         android:layout_below="@+id/onOff"
         android:layout_alignParentStart="true"
         android:layout_marginTop="41dp"
@@ -61,7 +61,7 @@
         android:layout_alignParentStart="true"
         android:layout_alignParentEnd="true"
         android:layout_marginStart="165dp"
-        android:layout_marginTop="25dp"
+        android:layout_marginTop="28dp"
         android:layout_marginEnd="166dp"
         android:text="Location of Other Phone"
         android:textAlignment="center"
@@ -84,6 +84,7 @@
         android:text="Send"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.0"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/peerListView"
         app:layout_constraintVertical_bias="1.0" />
@@ -104,5 +105,33 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
+
+    <Button
+        android:id="@+id/disconnectbtn"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="18dp"
+        android:layout_marginTop="56dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="41dp"
+        android:text="Disconnect"
+        app:layout_constraintBottom_toTopOf="@+id/peerListView"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toEndOf="@+id/discover"
+        app:layout_constraintTop_toBottomOf="@+id/connectionStatus" />
+
+    <ImageView
+        android:id="@+id/VideoFeedScreen"
+        android:layout_width="305dp"
+        android:layout_height="215dp"
+        android:layout_marginStart="53dp"
+        android:layout_marginTop="10dp"
+        android:layout_marginEnd="53dp"
+        android:layout_marginBottom="18dp"
+        app:layout_constraintBottom_toTopOf="@+id/sendButton"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/readMsg"
+        tools:srcCompat="@tools:sample/backgrounds/scenic" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

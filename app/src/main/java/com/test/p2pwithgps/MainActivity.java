@@ -22,6 +22,7 @@ import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.TextView;
 
@@ -53,8 +54,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class MainActivity extends AppCompatActivity {
-    Button btnOnOff, btnDiscover, btnSend;
+    Button btnOnOff, btnDiscover, btnSend, btnDisconnect;
     ListView listView;
+    ImageView videofeed;
     TextView GPSLocation, connectionStatus;
     WifiManager wifiManager;
     WifiP2pManager mManager;
@@ -79,8 +81,8 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_main);
-        initializevar(); //function to initialize all values
-        getCurrentLocation(); //get location of phone
+        initializer(); //function to initialize all values
+        getCurrentLocation();
         buttonfunctions(); //function to assign button functions
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
             Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
@@ -176,10 +178,48 @@ public class MainActivity extends AppCompatActivity {
                 Toast.makeText(MainActivity.this, "Not connected", Toast.LENGTH_SHORT).show();
             }
         });
+        btnDisconnect.setOnClickListener(v->{
+            //disconnect the phones
+            try{
+                if (sendReceive != null)
+                {
+                    sendReceive.socket.close();
+                }
+                if(serverClass != null && serverClass.serverSocket != null)
+                {
+                    serverClass.serverSocket.close();
+                }
+            }catch(IOException e)
+            {
+                e.printStackTrace();
+            }
+            if (ActivityCompat.checkSelfPermission(MainActivity.this, Manifest.permission.ACCESS_FINE_LOCATION)
+                    != PackageManager.PERMISSION_GRANTED || ActivityCompat.checkSelfPermission(MainActivity.this,
+                    Manifest.permission.NEARBY_WIFI_DEVICES)!= PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(MainActivity.this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION,
+                        Manifest.permission.NEARBY_WIFI_DEVICES}, 6);
+                return;
+            }
+            mManager.removeGroup(mChannel, new WifiP2pManager.ActionListener() {
+                @Override
+                public void onFailure(int i) {
+                    runOnUiThread(()->
+                            Toast.makeText(MainActivity.this, "Disconnect didn't work because " + i, Toast.LENGTH_SHORT).show());
+                }
+
+                @Override
+                public void onSuccess() {
+                    runOnUiThread(()->{
+                    connectionStatus.setText("Disconnected");
+                    Toast.makeText(MainActivity.this, "Successful DIsconnection", Toast.LENGTH_SHORT).show();
+                    });
+                }
+            });
+        });
     }
 
     //initializevar========================================================================================================================================================
-    private void initializevar() {
+    private void initializer() {
         btnOnOff = findViewById(R.id.onOff);
         btnDiscover = findViewById(R.id.discover);
         btnSend = findViewById(R.id.sendButton);
@@ -196,6 +236,8 @@ public class MainActivity extends AppCompatActivity {
         mIntentFilter.addAction(WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION);
         mIntentFilter.addAction(WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION);
         mIntentFilter.addAction(WifiP2pManager.WIFI_P2P_THIS_DEVICE_CHANGED_ACTION);
+        btnDisconnect = findViewById(R.id.disconnectbtn);
+        videofeed = findViewById(R.id.VideoFeedScreen);
     }
 
     WifiP2pManager.PeerListListener peerListListener = new WifiP2pManager.PeerListListener() {
@@ -302,33 +344,12 @@ public class MainActivity extends AppCompatActivity {
                     break; //get out of loop
                 }
             }
-            //attempt to send multiple messages on single buffer w/ corresponding length
-            /*try {
-                while (socket != null && socket.isConnected()) {
-                    int messType = dataInputStream.readInt();
-                    int length = dataInputStream.readInt();
-                    if (length > 0) {
-                        byte[] BytesinMess = new byte[length];
-                        dataInputStream.readFully(BytesinMess);
-                        String mess = new String(BytesinMess);
-                        runOnUiThread(() -> {
-                            if (messType == 1) {
-                                read_msg_box.append(mess + "\n");
-                            } else if (messType == 2) {
-                                GPSLocation.append(mess + "\n");
-                            }
-                        });
-                    }
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
-            }*/
         }
 
         public void write(byte[] bytes) //send data to other device
         {
-            new Thread(()->{ //create another thread to not block receive loop
-                try{
+            new Thread(() -> { //create another thread to not block receive loop
+                try {
                     if (socket != null && socket.isConnected() && !socket.isClosed()) //if socket is valid (something in socket, is connected, and isn't closed)
                     {
                         outputStream.write(bytes); //send the bytes
@@ -337,26 +358,10 @@ public class MainActivity extends AppCompatActivity {
                 } catch (IOException e) //if it fails for some reason
                 {
                     e.printStackTrace(); //display error
-                    runOnUiThread(()-> Toast.makeText(MainActivity.this, "Connection lost", Toast.LENGTH_SHORT).show());// show small message on sceen that connection is lost
-                }
-            }).start();
-        }
-            /*new Thread(()->
-            {
-                try {
-                    if (socket != null && socket.isConnected() && !socket.isClosed())//if socket is valid (something in socket, is connected, and isn't closed)
-                    {
-                        dataOutputStream.writeInt(num);
-                        dataOutputStream.writeInt(bytes.length);
-                        dataOutputStream.write(bytes);
-                        dataOutputStream.flush();
-                    }
-                } catch (IOException e) {
-                    e.printStackTrace();
                     runOnUiThread(() -> Toast.makeText(MainActivity.this, "Connection lost", Toast.LENGTH_SHORT).show());// show small message on sceen that connection is lost
                 }
             }).start();
-        }*/
+        }
     }
         // ServerClass========================================================================================================================================================
         public class ServerClass extends Thread {
